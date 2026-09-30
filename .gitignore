@@ -1,0 +1,6 @@
+.venv/
+.env
+api.env
+__pycache__/
+*.pyc
+neuro-rag/
