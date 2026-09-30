@@ -50,11 +50,11 @@ Aura is named after the warning sensation some people feel before a seizure: it 
 
 ## Roadmap
 
-- [ ] Evaluation set of 30-40 questions measuring retrieval accuracy and answer faithfulness
-- [ ] Hybrid search (keyword + semantic) with reranking
-- [ ] Filters by year and study type, plus evidence-strength labels
-- [ ] Follow-up questions with conversation memory
-- [ ] Show only the sources actually cited in the answer
+- Evaluation set of 30-40 questions measuring retrieval accuracy and answer faithfulness
+- Hybrid search (keyword + semantic) with reranking
+- Filters by year and study type, plus evidence-strength labels
+- Follow-up questions with conversation memory
+- Show only the sources actually cited in the answer
 
 ## Data and acknowledgements
 
