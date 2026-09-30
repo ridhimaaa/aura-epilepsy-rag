@@ -1,6 +1,6 @@
-streamlit
-chromadb
-sentence-transformers
-google-genai
-python-dotenv
-requests
+streamlit==1.64.0
+chromadb==1.5.9
+sentence-transformers==6.1.0
+google-genai==2.25.0
+python-dotenv==1.2.3
+requests==2.34.2
