@@ -11,9 +11,10 @@ from sentence_transformers import SentenceTransformer
 load_dotenv()
 
 # ---- Settings you can tweak -------------------------------------------------
-GEMINI_MODELS = ["gemini-3.8-flash", "gemini-3.5-flash-lite"]  # tries in order # change if Google renames/retires it
+GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite"]  # tries in order # change if Google renames/retires it
 TOP_K = 5                          # how many different papers to use
 MAX_DISTANCE = 0.75                # above this, a match is treated as irrelevant
+REQUEST_TIMEOUT_MS = 20000         # give up on one Gemini call after 20 seconds
 # -----------------------------------------------------------------------------
 
 DISCLAIMER = "For research and education only. This is not medical advice."
@@ -41,7 +42,28 @@ SYSTEM_PROMPT = (
 
 embedder = SentenceTransformer("all-MiniLM-L6-v2")
 collection = chromadb.PersistentClient(path="chroma_db").get_collection("epilepsy")
-client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(
+    api_key=os.getenv("GEMINI_API_KEY"),
+    http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS),
+)
+
+# Models that returned "not found" are skipped for the rest of the session,
+# so a wrong or retired model name does not slow down every question.
+_dead_models = set()
+
+
+def _is_missing_model(error):
+    msg = str(error).lower()
+    return "404" in msg or "not_found" in msg or "not found" in msg
+
+
+def _is_transient(error):
+    msg = str(error).lower()
+    return any(
+        s in msg
+        for s in ("429", "500", "503", "unavailable", "resource_exhausted",
+                  "overloaded", "timed out", "timeout")
+    )
 
 
 def is_personal_question(question):
@@ -87,7 +109,9 @@ def answer_question(question):
             "",
         )
 
+    t0 = time.time()
     sources = retrieve(question)
+    print(f"[Aura] retrieval took {time.time() - t0:.1f}s")
     if not sources or sources[0]["distance"] > MAX_DISTANCE:
         return "I couldn't find this in the available sources.", ""
 
@@ -97,8 +121,11 @@ def answer_question(question):
     prompt = f"SOURCES:\n{context}\n\nQUESTION: {question}"
     answer = None
     last_error = None
+    t1 = time.time()
     for model_name in GEMINI_MODELS:
-        for attempt in range(3):
+        if model_name in _dead_models:
+            continue
+        for attempt in range(2):
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -109,10 +136,18 @@ def answer_question(question):
                     ),
                 )
                 answer = response.text
+                print(f"[Aura] {model_name} answered in {time.time() - t1:.1f}s")
                 break
             except Exception as e:
                 last_error = e
-                time.sleep(2 * (attempt + 1))
+                print(f"[Aura] {model_name} failed (attempt {attempt + 1}): {e}")
+                if _is_missing_model(e):
+                    _dead_models.add(model_name)  # do not retry a model that does not exist
+                    break
+                if _is_transient(e) and attempt == 0:
+                    time.sleep(2)  # short pause, then one retry
+                    continue
+                break
         if answer:
             break
 
